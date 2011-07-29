@@ -119,6 +119,8 @@ public class GitSCM extends SCM implements Serializable {
     private boolean clean;
     private boolean wipeOutWorkspace;
     private boolean pruneBranches;
+    private boolean remotePoll;
+
     /**
      * @deprecated
      *      Replaced by {@link #buildChooser} instead.
@@ -166,7 +168,7 @@ public class GitSCM extends SCM implements Serializable {
                 null,
                 false, Collections.<SubmoduleConfig>emptyList(), false,
                 false, new DefaultBuildChooser(), null, null, false, null,
-                null, null, null, false, false, null, null, false);
+                null, null, null, false, false, false, null, null, false);
     }
 
     @DataBoundConstructor
@@ -188,6 +190,7 @@ public class GitSCM extends SCM implements Serializable {
             String localBranch,
             boolean recursiveSubmodules,
             boolean pruneBranches,
+            boolean remotePoll,
             String gitConfigName,
             String gitConfigEmail,
             boolean skipTag) {
@@ -235,6 +238,18 @@ public class GitSCM extends SCM implements Serializable {
         this.excludedUsers = excludedUsers;
         this.recursiveSubmodules = recursiveSubmodules;
         this.pruneBranches = pruneBranches;
+        if (remotePoll
+            && (branches.size() > 1
+            || repo.size() > 1
+            || (excludedRegions != null && excludedRegions.length() > 0)
+            || (submoduleCfg.size() != 0)
+            || (excludedUsers != null && excludedUsers.length() > 0))) {
+            LOGGER.log(Level.WARNING, "Cannot poll remotely with current configuration.");
+            this.remotePoll = false;
+        } else {
+            this.remotePoll = remotePoll;
+        }
+
         this.gitConfigName = gitConfigName;
         this.gitConfigEmail = gitConfigEmail;
         this.skipTag = skipTag;
@@ -450,6 +465,10 @@ public class GitSCM extends SCM implements Serializable {
         return this.pruneBranches;
     }
 
+    public boolean getRemotePoll() {
+        return this.remotePoll;
+    }
+
     public boolean getWipeOutWorkspace() {
         return this.wipeOutWorkspace;
     }
@@ -561,6 +580,13 @@ public class GitSCM extends SCM implements Serializable {
     }
 
     @Override
+    public boolean requiresWorkspaceForPolling() {
+        if(remotePoll)
+            return false;
+        return true;
+    }
+
+    @Override
     protected PollingResult compareRemoteRevisionWith(AbstractProject<?, ?> project, Launcher launcher, FilePath workspace, final TaskListener listener, SCMRevisionState baseline) throws IOException, InterruptedException {
         // Poll for changes. Are there any unbuilt revisions that Hudson ought to build ?
 
@@ -580,6 +606,22 @@ public class GitSCM extends SCM implements Serializable {
 
         if (buildData != null && buildData.lastBuild != null) {
             listener.getLogger().println("[poll] Last Built Revision: " + buildData.lastBuild.revision);
+        }
+
+        if (getBranches().size() == 1 && this.remotePoll) {
+            final EnvVars environment = GitUtils.getPollEnvironment(project, workspace, launcher, listener);
+            IGitAPI git = new GitAPI("/usr/bin/git", workspace, listener, environment);
+            String gitRepo = getParamExpandedRepos(lastBuild).get(0).getURIs().get(0).toString();
+            String headRevision = git.getHeadRev(gitRepo, getBranches().get(0).getName());
+
+//            listener.getLogger().println("Remote revision is \"" + headRevision + "\" and previous revision is \"" + lastBuildRevision + "\"");
+
+            if(buildData.lastBuild.getRevision().getSha1String().equals(headRevision)) {
+                return PollingResult.NO_CHANGES;
+            } else {
+                return PollingResult.BUILD_NOW;
+            }
+
         }
 
         final String gitExe;
@@ -1581,7 +1623,7 @@ public class GitSCM extends SCM implements Serializable {
     /**
      * Given the workspace, gets the working directory, which will be the workspace
      * if no relative target dir is specified. Otherwise, it'll be "workspace/relativeTargetDir".
-     * 
+     *
      * @param workspace
      * @return working directory
      */
