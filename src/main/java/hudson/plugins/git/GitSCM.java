@@ -277,10 +277,8 @@ public class GitSCM extends SCM implements Serializable {
         if (this.remotePoll) {
             String lastBuildRevision = buildData.lastBuild.revision.getSha1String();
 
-            //FIXME: get master environment....
-            final EnvVars environment = lastBuild.getEnvironment(listener);
+            final EnvVars environment = new EnvVars(System.getenv());
 
-            //FIXME: use master node gitExe
             IGitAPI git = new GitAPI(gitExe, workspace, listener, environment);
             String gitBranch = getBranches().get(0).getName();
             String gitRepo = getRepositories().get(0).getURIs().get(0).toString();
