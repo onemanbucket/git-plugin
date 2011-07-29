@@ -260,6 +260,11 @@ public class GitSCM extends SCM implements Serializable {
             listener.getLogger().println("[poll] Last Build : #" + lastBuild.getNumber() );
         }
 
+        if(lastBuild == null && remotePoll) {
+            // first build...
+            return true;
+        }
+
         final BuildData buildData = getBuildData(lastBuild, false);
 
         if( buildData != null && buildData.lastBuild != null)
@@ -269,12 +274,13 @@ public class GitSCM extends SCM implements Serializable {
 
         final String singleBranch = getSingleBranch(lastBuild);
 
-        if (singleBranch != null && this.remotePoll) {
+        if (this.remotePoll) {
             String lastBuildRevision = buildData.lastBuild.revision.getSha1String();
 
             //FIXME: get master environment....
             final EnvVars environment = lastBuild.getEnvironment(listener);
 
+            //FIXME: use master node gitExe
             IGitAPI git = new GitAPI(gitExe, workspace, listener, environment);
             String gitBranch = getBranches().get(0).getName();
             String gitRepo = getRepositories().get(0).getURIs().get(0).toString();
