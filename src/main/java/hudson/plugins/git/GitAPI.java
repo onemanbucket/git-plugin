@@ -321,7 +321,7 @@ public class GitAPI implements IGitAPI {
         launchCommand("submodule", "sync");
     }
 
-    
+
     /**
      * Update submodules.
      *
@@ -622,4 +622,16 @@ public class GitAPI implements IGitAPI {
             throw new GitException("Error retrieving tag names", e);
         }
     }
+
+    public String getHeadRev(String remoteRepoUrl, String branch) throws GitException {
+        String[] branchExploded = branch.split("/");
+        branch = branchExploded[branchExploded.length-1];
+        ArgumentListBuilder args = new ArgumentListBuilder("ls-remote");
+        args.add("-h");
+        args.add(remoteRepoUrl);
+        args.add(branch);
+        String result = launchCommand(args);
+        return result.length()>=40 ? result.substring(0,40) : "";
+    }
+
 }

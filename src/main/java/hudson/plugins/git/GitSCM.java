@@ -86,6 +86,8 @@ public class GitSCM extends SCM implements Serializable {
 
 	private boolean clean;
 
+	private boolean remotePoll;
+
     private String choosingStrategy = DEFAULT;
     public static final String DEFAULT = "Default";
     public static final String GERRIT = "Gerrit";
@@ -113,6 +115,7 @@ public class GitSCM extends SCM implements Serializable {
             boolean doGenerateSubmoduleConfigurations,
             Collection<SubmoduleConfig> submoduleCfg,
             boolean clean,
+            boolean remotePoll,
             String choosingStrategy, GitWeb browser) {
 
 		// normalization
@@ -127,6 +130,13 @@ public class GitSCM extends SCM implements Serializable {
 		this.submoduleCfg = submoduleCfg;
 
 		this.clean = clean;
+		if(remotePoll && (branches.size() > 1 || repositories.size() > 1)) {
+//		        LOGGER.log(Level.WARNING, "Cannot poll remotely with current configuration.");
+		        this.remotePoll = false;
+	    } else {
+	        this.remotePoll = remotePoll;
+	    }
+
         this.choosingStrategy = choosingStrategy;
 		this.configVersion = 1L;
 	}
@@ -188,6 +198,10 @@ public class GitSCM extends SCM implements Serializable {
 		return this.clean;
 	}
 
+	public boolean getRemotePoll() {
+	    return this.remotePoll;
+	}
+
     public String getChoosingStrategy() {
         return choosingStrategy;
     }
@@ -222,6 +236,12 @@ public class GitSCM extends SCM implements Serializable {
         return branch;
     }
 
+    @Override
+    public boolean requiresWorkspaceForPolling() {
+        if(this.remotePoll)
+            return false;
+        return true;
+    }
 
 	@Override
 	public boolean pollChanges(final AbstractProject project, Launcher launcher,
@@ -248,6 +268,19 @@ public class GitSCM extends SCM implements Serializable {
         }
 
         final String singleBranch = getSingleBranch(lastBuild);
+
+        if (singleBranch != null && this.remotePoll) {
+            String lastBuildRevision = buildData.lastBuild.revision.getSha1String();
+
+            //FIXME: get master environment....
+            final EnvVars environment = lastBuild.getEnvironment(listener);
+
+            IGitAPI git = new GitAPI(gitExe, workspace, listener, environment);
+            String gitBranch = getBranches().get(0).getName();
+            String gitRepo = getRepositories().get(0).getURIs().get(0).toString();
+            String headRevision = git.getHeadRev(gitRepo, gitBranch);
+            return !lastBuildRevision.equals(headRevision);
+        }
 
 		boolean pollChangesResult = workspace.act(new FileCallable<Boolean>() {
 			private static final long serialVersionUID = 1L;
@@ -867,6 +900,7 @@ public class GitSCM extends SCM implements Serializable {
 				    req.getParameter("git.generate") != null,
 					submoduleCfg,
 					req.getParameter("git.clean") != null,
+					req.getParameter("git.remotePoll") != null,
                     req.getParameter("git.choosing_strategy"),
 					gitWeb);
 		}

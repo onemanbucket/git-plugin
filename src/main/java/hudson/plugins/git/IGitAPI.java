@@ -61,4 +61,6 @@ public interface IGitAPI {
 
     ObjectId mergeBase(ObjectId sha1, ObjectId sha12);
     String getAllLogEntries(String branch);
+
+    public String getHeadRev(String remoteRepoUrl, String branch) throws GitException;
 }

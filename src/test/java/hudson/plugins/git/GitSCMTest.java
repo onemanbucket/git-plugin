@@ -200,6 +200,39 @@ public class GitSCMTest extends HudsonTestCase {
         assertFalse("scm polling should not detect any more changes after last build", project.pollSCMChanges(listener));
     }
 
+    public void testBasicRemotePoll() throws Exception {
+//        FreeStyleProject project = setupProject("master", true, false);
+        FreeStyleProject project1 = createFreeStyleProject();
+        final MockStaplerRequest req = new MockStaplerRequest()
+            .setRepo(workDir.getAbsolutePath(), "origin", "")
+            .setBranch("master")
+            .setRemotePoll("true");
+        project1.setScm(hudson.getScm("GitSCM").newInstance(req, null));
+        project1.getBuildersList().add(new CaptureEnvironmentBuilder());
+        FreeStyleProject project = project1;
+
+        // create initial commit and then run the build against it:
+        final String commitFile1 = "commitFile1";
+        commit(commitFile1, johnDoe, "Commit number 1");
+        build(project, Result.SUCCESS, commitFile1);
+
+        assertFalse("scm polling should not detect any more changes after build", project.pollSCMChanges(listener));
+
+        final String commitFile2 = "commitFile2";
+        commit(commitFile2, janeDoe, "Commit number 2");
+        assertTrue("scm polling did not detect commit2 change", project.pollSCMChanges(listener));
+        // ... and build it...
+        final FreeStyleBuild build2 = build(project, Result.SUCCESS, commitFile2);
+        final Set<User> culprits = build2.getCulprits();
+        assertEquals("The build should have only one culprit", 1, culprits.size());
+        assertEquals("", janeDoe.getName(), culprits.iterator().next().getFullName());
+        assertTrue(build2.getWorkspace().child(commitFile2).exists());
+        assertBuildStatusSuccess(build2);
+        assertFalse("scm polling should not detect any more changes after build", project.pollSCMChanges(listener));
+    }
+
+
+
     private FreeStyleProject setupSimpleProject(String branchString) throws Exception {
         FreeStyleProject project = createFreeStyleProject();
         final MockStaplerRequest req = new MockStaplerRequest()

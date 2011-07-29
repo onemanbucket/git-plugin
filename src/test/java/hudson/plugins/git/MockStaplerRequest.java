@@ -62,7 +62,6 @@ public class MockStaplerRequest implements StaplerRequest {
         return put("git.repo.url", repoUrl)
             .put("git.repo.name", repoName)
             .put("git.repo.refspec", refSpec);
-
     }
 
     public MockStaplerRequest setBranches(String[] branches) {
@@ -87,6 +86,10 @@ public class MockStaplerRequest implements StaplerRequest {
 
     public MockStaplerRequest setGitClean(String gitClean) {
         return put("git.clean", gitClean);
+    }
+
+    public MockStaplerRequest setRemotePoll(String gitRemotePoll) {
+        return put("git.remotePoll", gitRemotePoll);
     }
 
     public MockStaplerRequest setGitExe(String gitExe) {
