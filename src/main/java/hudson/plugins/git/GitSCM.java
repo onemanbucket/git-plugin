@@ -1,7 +1,6 @@
 package hudson.plugins.git;
 
 import static hudson.Util.fixEmptyAndTrim;
-
 import hudson.AbortException;
 import hudson.EnvVars;
 import hudson.Extension;
@@ -11,7 +10,6 @@ import hudson.Launcher;
 import hudson.Util;
 import hudson.matrix.MatrixRun;
 import hudson.matrix.MatrixBuild;
-import hudson.model.Action;
 import hudson.model.BuildListener;
 import hudson.model.Descriptor.FormException;
 import hudson.model.Items;
@@ -30,9 +28,9 @@ import hudson.plugins.git.opt.PreBuildMergeOptions;
 import hudson.plugins.git.util.Build;
 import hudson.plugins.git.util.BuildChooser;
 import hudson.plugins.git.util.BuildChooserDescriptor;
-import hudson.plugins.git.util.BuildData;
 import hudson.plugins.git.util.DefaultBuildChooser;
 import hudson.plugins.git.util.GitUtils;
+import hudson.plugins.git.util.BuildData;
 import hudson.remoting.VirtualChannel;
 import hudson.scm.ChangeLogParser;
 import hudson.scm.PollingResult;
@@ -40,6 +38,7 @@ import hudson.scm.SCMDescriptor;
 import hudson.scm.SCMRevisionState;
 import hudson.scm.SCM;
 import hudson.util.FormValidation;
+import hudson.util.IOUtils;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -61,7 +60,6 @@ import java.util.regex.Pattern;
 
 import javax.servlet.ServletException;
 
-import hudson.util.IOUtils;
 import net.sf.json.JSONObject;
 
 import org.eclipse.jgit.lib.Config;
@@ -239,8 +237,9 @@ public class GitSCM extends SCM implements Serializable {
         this.recursiveSubmodules = recursiveSubmodules;
         this.pruneBranches = pruneBranches;
         if (remotePoll
-            && (branches.size() > 1
-            || repo.size() > 1
+            && (branches.size() != 1
+            || branches.get(0).getName().contains("*")
+            || repo.size() != 1
             || (excludedRegions != null && excludedRegions.length() > 0)
             || (submoduleCfg.size() != 0)
             || (excludedUsers != null && excludedUsers.length() > 0))) {
@@ -608,13 +607,21 @@ public class GitSCM extends SCM implements Serializable {
             listener.getLogger().println("[poll] Last Built Revision: " + buildData.lastBuild.revision);
         }
 
-        if (getBranches().size() == 1 && this.remotePoll) {
+        final String singleBranch = getSingleBranch(lastBuild);
+
+        if (singleBranch != null && this.remotePoll) {
+            String gitExe = "";
+            GitTool[] installations = ((hudson.plugins.git.GitTool.DescriptorImpl)Hudson.getInstance().getDescriptorByType(GitTool.DescriptorImpl.class)).getInstallations();
+            for(GitTool i : installations) {
+                if(i.getName().equals(gitTool)) {
+                    gitExe = i.getGitExe();
+                    break;
+                }
+            }
             final EnvVars environment = GitUtils.getPollEnvironment(project, workspace, launcher, listener);
-            IGitAPI git = new GitAPI("/usr/bin/git", workspace, listener, environment);
+            IGitAPI git = new GitAPI(gitExe, workspace, listener, environment);
             String gitRepo = getParamExpandedRepos(lastBuild).get(0).getURIs().get(0).toString();
             String headRevision = git.getHeadRev(gitRepo, getBranches().get(0).getName());
-
-//            listener.getLogger().println("Remote revision is \"" + headRevision + "\" and previous revision is \"" + lastBuildRevision + "\"");
 
             if(buildData.lastBuild.getRevision().getSha1String().equals(headRevision)) {
                 return PollingResult.NO_CHANGES;
@@ -653,7 +660,7 @@ public class GitSCM extends SCM implements Serializable {
 
         final EnvVars environment = GitUtils.getPollEnvironment(project, workspace, launcher, listener);
         final List<RemoteConfig> paramRepos = getParamExpandedRepos(lastBuild);
-        final String singleBranch = getSingleBranch(lastBuild);
+//        final String singleBranch = getSingleBranch(lastBuild);
 
         boolean pollChangesResult = workingDirectory.act(new FileCallable<Boolean>() {
 
